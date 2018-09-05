@@ -1947,6 +1947,66 @@ describe JSON::LD::API do
       end
     end
 
+    context "embedded JSON" do
+      {
+        "preserves expanded hash value": {
+          input: %({
+            "http://example.org/foo": {"@value": {"bar": "baz"}, "@type": "@json"}
+          }),
+          output: %([{
+            "http://example.org/foo": [{"@value": [{"bar": "baz"}], "@type": "@json"}]
+          }])
+        },
+        "preserves expanded empty hash value": {
+          input: %({
+            "http://example.org/foo": {"@value": {}, "@type": "@json"}
+          }),
+          output: %([{
+            "http://example.org/foo": [{"@value": [{}], "@type": "@json"}]
+          }])
+        },
+        "preserves expanded array value": {
+          input: %({
+            "http://example.org/foo": {"@value": [1, 2, 3], "@type": "@json"}
+          }),
+          output: %([{
+            "http://example.org/foo": [{"@value": [1, 2, 3], "@type": "@json"}]
+          }])
+        },
+        "Raises InvalidValueObjectValue if @type is not @json": {
+          input: %({
+            "http://example.org/foo": {"@value": {"bar": "baz"}}
+          }),
+          exception: JSON::LD::JsonLdError::InvalidValueObjectValue
+        },
+        "Raises InvalidTypeMapping if @json used in context without @version: 1.1": {
+          input: %({
+            "@context": {
+              "@vocab": "http://example/",
+              "json-value": {"@type": "@json"}
+            },
+            "json-value": {"native": "json"}
+          }),
+          exception: JSON::LD::JsonLdError::InvalidTypeMapping
+        },
+        "Expands  embedded JSON": {
+          input: %({
+            "@context": {
+              "@version": 1.1,
+              "@vocab": "http://example/",
+              "json-value": {"@type": "@json"}
+            },
+            "json-value": {"native": "json"}
+          }),
+          output: %([{
+            "http://example/json-value": [{"@value": [{"native": "json"}], "@type": "@json"}]
+          }])
+        }
+      }.each do |title, params|
+        it(title) {run_expand(params)}
+      end
+    end
+
     context "scoped context" do
       {
         "adding new term" => {

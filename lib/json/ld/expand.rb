@@ -73,11 +73,21 @@ module JSON::LD
             "value object has unknown keys: #{output_object.inspect}"
           end
 
+          # If @value is not a scalar or null, an invalid value object value error has been detected and processing is aborted. Otherwise, set expanded value to value. If expanded value is null, set the @value member of result to null and continue with the next key from element. Null values need to be preserved in this case as the meaning of an @type member depends on the existence of an @value member.
+          case output_object['@value']
+          when Array
+            raise JsonLdError::InvalidValueObjectValue,
+                  "@value value may not be an array unless framing or when @type if @json: #{output_object['@value'].inspect}" unless
+              framing || Array(output_object['@type']) == %w(@json)
+          end
+
           output_object.delete('@language') if output_object.key?('@language') && Array(output_object['@language']).empty?
           output_object.delete('@type') if output_object.key?('@type') && Array(output_object['@type']).empty?
 
           # If the value of result's @value key is null, then set result to null.
-          ary = Array(output_object['@value'])
+          ary = output_object['@value'].is_a?(Array) ?
+            output_object['@value'] :
+            [output_object['@value']].compact
           return nil if ary.empty?
 
           if !ary.all? {|v| v.is_a?(String) || v.is_a?(Hash) && v.empty?} && output_object.has_key?('@language')
@@ -86,8 +96,9 @@ module JSON::LD
                   "when @language is used, @value must be a string: #{output_object.inspect}"
           elsif !Array(output_object['@type']).all? {|t|
                   t.is_a?(String) && RDF::URI(t).absolute? && !t.start_with?('_:') ||
-                  t.is_a?(Hash) && t.empty?}
-            # Otherwise, if the result has a @type member and its value is not an IRI, an invalid typed value error has been detected and processing is aborted.
+                  t.is_a?(Hash) && t.empty? ||
+                  t == '@json'}
+            # Otherwise, if the result has a @type member and its value is not an IRI or @json, an invalid typed value error has been detected and processing is aborted.
             raise JsonLdError::InvalidTypedValue,
                   "value of @type must be an IRI: #{output_object.inspect}"
           end
@@ -235,17 +246,9 @@ module JSON::LD
               output_object['@value'] = nil
               next;
             when Array
-              raise JsonLdError::InvalidValueObjectValue,
-                    "@value value may not be an array unless framing: #{value.inspect}" unless framing
               value
             when Hash
-              raise JsonLdError::InvalidValueObjectValue,
-                    "@value value must be a an empty object for framing: #{value.inspect}" unless
-                    value.empty? && framing
               [value]
-            else
-              raise JsonLdError::InvalidValueObjectValue,
-                    "Value of #{expanded_property} must be a scalar or null: #{value.inspect}"
             end
           when '@language'
             # If expanded property is @language and value is not a string, an invalid language-tagged string error has been detected and processing is aborted. Otherwise, set expanded value to lowercased value.
@@ -347,6 +350,7 @@ module JSON::LD
         term_context = context.term_definitions[key].context if context.term_definitions[key]
         active_context = term_context ? context.parse(term_context) : context
         container = active_context.container(key)
+        type = active_context.type(key)
         expanded_value = if container == %w(@language) && value.is_a?(Hash)
           # Otherwise, if key's container mapping in active context is @language and value is a JSON object then value is expanded from a language map as follows:
           
@@ -413,6 +417,10 @@ module JSON::LD
             end
           end
           ary
+        elsif type == '@json'
+          # If the type mapping of key is @json, the value is a value object with @type: @json.
+          value = [value] unless value.is_a?(Array)
+          {"@value" => value, "@type" => '@json'}
         else
           # Otherwise, initialize expanded value to the result of using this algorithm recursively, passing active context, key for active property, and value for element.
           expand(value, key, active_context, ordered: ordered, framing: framing)

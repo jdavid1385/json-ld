@@ -606,7 +606,9 @@ module JSON::LD
           else
             :error
           end
-          unless (type == '@id' || type == '@vocab') || type.is_a?(RDF::URI) && type.absolute?
+          unless %w(@id @vocab).include?(type) ||
+            %w(@json).include?(type) && processingMode == "json-ld-1.1" ||
+            type.is_a?(RDF::URI) && type.absolute?
             raise JsonLdError::InvalidTypeMapping, "unknown mapping for '@type': #{type.inspect} on term #{term.inspect}"
           end
           #log_debug("") {"type_mapping: #{type.inspect}"}
@@ -869,7 +871,7 @@ module JSON::LD
     end
 
     ##
-    # Retrieve container mapping, add it if `value` is provided
+    # Retrieve container mapping
     #
     # @param [Term, #to_s] term in unexpanded form
     # @return [Array<'@index', '@language', '@index', '@set', '@type', '@id', '@graph'>]
@@ -877,6 +879,16 @@ module JSON::LD
       return [term] if KEYWORDS.include?(term)
       term = find_definition(term)
       term ? term.container_mapping : []
+    end
+
+    ##
+    # Retrieve type mapping
+    #
+    # @param [Term, #to_s] term in unexpanded form
+    # @return [Array<'@id', '@vocab', '@json', RDF::URI>]
+    def type(term)
+      term = find_definition(term)
+      term.type_mapping if term
     end
 
     ##

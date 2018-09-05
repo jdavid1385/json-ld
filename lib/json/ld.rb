@@ -49,6 +49,7 @@ module JSON
       @default
       @embed
       @explicit
+      @json
       @id
       @index
       @graph
